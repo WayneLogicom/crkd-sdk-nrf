@@ -31,7 +31,40 @@
 
 LOG_MODULE_REGISTER(esb, CONFIG_ESB_LOG_LEVEL);
 
+///////////////////////////////////////////////////////////////////////////////////////////////
+//
+//  CRKD MODIFICATIONS ARE WITHIN THIS FILE - for nrf52840DK debug only
+//
+///////////////////////////////////////////////////////////////////////////////////////////////
+    #define DBGPIN_ENABLE   false
+	
+	#if DBGPIN_ENABLE
+		#define DBG_SET(pin) NRF_P0->OUTSET = BIT(pin)
+		#define DBG_CLR(pin) NRF_P0->OUTCLR = BIT(pin)
+	#else
+		#define DBG_SET(pin) {}
+		#define DBG_CLR(pin) {}
+	#endif
+
+	#if CONFIG_BOARD_NRF7002
+		// port 0 debug pins
+		#define TXDBG_PIN       4 
+		#define RXDBG_PIN       5
+	#elif CONFIG_BOARD_NRF5340_AUDIO_DK_NRF5340_CPUNET
+		// port 0 debug pins
+		#define TXDBG_PIN       4
+		#define RXDBG_PIN       7
+	#else
+		// port 0 debug pins
+		#define TXDBG_PIN       0xFF
+		#define RXDBG_PIN       0xFF
+	#endif
 /* Constants */
+
+// PER support
+int esb_frame_count = 0;
+int esb_error_count = 0;
+
 
 /* 2 Mb RX wait for acknowledgment time-out value.
  * Smallest reliable value: 160.
@@ -825,6 +858,9 @@ static void sys_timer_deinit(void)
 
 static void start_tx_transaction(void)
 {
+	DBG_SET( TXDBG_PIN ); 	// TX start
+	esb_frame_count++;		// increment frames sent	
+
 	bool ack = true;
 	bool is_tx_idle = false;
 	struct esb_radio_pdu *pdu = (struct esb_radio_pdu *)tx_payload_buffer;
@@ -972,6 +1008,8 @@ static void on_radio_disabled_tx_noack(void)
 
 static void on_radio_disabled_tx(void)
 {
+	DBG_CLR( TXDBG_PIN ); // TX stop
+
 	esb_ppi_for_txrx_clear(false, true);
 	/* The timer was triggered on radio disabled event so we can clear PPI connections here. */
 	esb_ppi_for_fem_clear();
@@ -987,12 +1025,11 @@ static void on_radio_disabled_tx(void)
 	 * received by the time defined in wait_for_ack_timeout_us
 	 */
 
-	nrfx_timer_compare(&esb_timer, NRF_TIMER_CC_CHANNEL0,
-			   (wait_for_ack_timeout_us + ADDR_EVENT_LATENCY_US), false);
+	uint16_t extra = esb_cfg.use_fast_ramp_up ? 50 : 0;	// Fast ramp up fix - for some reason RX window gets shorter when FRU is enabled, so we add extra time (50us)
+	nrfx_timer_compare(&esb_timer, NRF_TIMER_CC_CHANNEL0, (wait_for_ack_timeout_us + ADDR_EVENT_LATENCY_US + extra), false);
 
 	uint16_t ramp_up = esb_cfg.use_fast_ramp_up ? TX_FAST_RAMP_UP_TIME_US : TX_RAMP_UP_TIME_US;
-	nrfx_timer_compare(&esb_timer, NRF_TIMER_CC_CHANNEL1,
-			   (esb_cfg.retransmit_delay - ramp_up), false);
+	nrfx_timer_compare(&esb_timer, NRF_TIMER_CC_CHANNEL1,  (esb_cfg.retransmit_delay - ramp_up), false);
 
 	nrf_timer_shorts_set(esb_timer.p_reg,
 		(NRF_TIMER_SHORT_COMPARE1_STOP_MASK | NRF_TIMER_SHORT_COMPARE1_CLEAR_MASK));
@@ -1012,10 +1049,13 @@ static void on_radio_disabled_tx(void)
 	nrf_radio_packetptr_set(NRF_RADIO, rx_payload_buffer);
 	on_radio_disabled = on_radio_disabled_tx_wait_for_ack;
 	esb_state = ESB_STATE_PTX_RX_ACK;
+	DBG_SET( RXDBG_PIN ); // RX Start
 }
 
 static void on_radio_disabled_tx_wait_for_ack(void)
 {
+	DBG_CLR( RXDBG_PIN );   // TX stop
+
 	struct esb_radio_pdu *rx_pdu = (struct esb_radio_pdu *)rx_payload_buffer;
 	/* This marks the completion of a TX_RX sequence (TX with ACK) */
 
@@ -1050,7 +1090,10 @@ static void on_radio_disabled_tx_wait_for_ack(void)
 			NVIC_SetPendingIRQ(ESB_EVT_IRQ);
 			start_tx_transaction();
 		}
-	} else {
+	} 
+	else 
+	{
+		esb_error_count++;
 		if (retransmits_remaining-- == 0) {
 			nrf_timer_task_trigger(esb_timer.p_reg, NRF_TIMER_TASK_SHUTDOWN);
 
@@ -1107,6 +1150,7 @@ static void on_radio_disabled_tx_wait_for_ack(void)
 				esb_ppi_for_txrx_set(false, true);
 				esb_fem_for_tx_set(true);
 
+				DBG_SET( TXDBG_PIN ); // TX start
 				radio_start();
 			}
 		}
@@ -1228,7 +1272,9 @@ static void on_radio_disabled_rx(void)
 
 		switch (esb_cfg.protocol) {
 		case ESB_PROTOCOL_ESB_DPL:
+			//DBG_SET( TXDBG_PIN ); 
 			on_radio_disabled_rx_dpl(retransmit_payload, pipe_info);
+			//DBG_CLR( TXDBG_PIN ); 
 			break;
 
 		case ESB_PROTOCOL_ESB:
@@ -1240,6 +1286,7 @@ static void on_radio_disabled_rx(void)
 			break;
 		}
 
+		DBG_SET( TXDBG_PIN ); // TX start for PRX
 		esb_state = ESB_STATE_PRX_SEND_ACK;
 
 		update_radio_tx_power();
@@ -1275,6 +1322,7 @@ static void on_radio_disabled_rx_ack(void)
 	on_radio_disabled = on_radio_disabled_rx;
 
 	esb_state = ESB_STATE_PRX;
+	DBG_CLR( TXDBG_PIN );       // TX stop, back  to RX
 }
 
 /* Retrieve interrupt flags and reset them.
@@ -1481,7 +1529,6 @@ int esb_init(const struct esb_config *config)
 		/* Workaround for nRF52832 rev 2 errata 182 */
 		*(volatile uint32_t *)0x4000173C |= (1 << 10);
 	}
-
 	return 0;
 }
 

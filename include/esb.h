@@ -508,6 +508,9 @@ int esb_set_bitrate(enum esb_bitrate bitrate);
  */
 int esb_reuse_pid(uint8_t pipe);
 
+extern int esb_frame_count;
+extern int esb_error_count;
+
 /** @} */
 
 #ifdef __cplusplus
