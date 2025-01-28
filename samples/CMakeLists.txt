@@ -78,11 +78,11 @@ if (CONFIG_NCS_INCLUDE_RPMSG_CHILD_IMAGE OR CONFIG_NCS_SAMPLE_EMPTY_NET_CORE_CHI
 
   elseif (CONFIG_NCS_SAMPLE_CRKD_CONTROLLER_CHILD_IMAGE)
     set(CHILD_IMAGE_NAME "Controller_net_prj")
-    set(CHILD_IMAGE_PATH "c:/ncs/crkd/application/Controller_net_prj")
+    set(CHILD_IMAGE_PATH "${ZEPHYR_BASE}/../application/Controller_net_prj")
   
   elseif (CONFIG_NCS_SAMPLE_CRKD_DONGLE_CHILD_IMAGE)
     set(CHILD_IMAGE_NAME "Dongle_net_prj")
-    set(CHILD_IMAGE_PATH "c:/ncs/crkd/application/Dongle_net_prj")
+    set(CHILD_IMAGE_PATH "${ZEPHYR_BASE}/../application/Dongle_net_prj")
 
   elseif (CONFIG_NCS_SAMPLE_MULTIPROTOCOL_RPMSG_CHILD_IMAGE)
     set(CHILD_IMAGE_NAME "multiprotocol_rpmsg")
