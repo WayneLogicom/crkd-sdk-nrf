@@ -114,8 +114,8 @@ config NCS_SAMPLE_EMPTY_NET_CORE_CHILD_IMAGE
 	bool
 	depends on SOC_NRF5340_CPUAPP && BOARD_ENABLE_CPUNET
 	depends on NRF53_UPGRADE_NETWORK_CORE && !NCS_INCLUDE_RPMSG_CHILD_IMAGE
-	default y
-	help
+	default n
+help
 	  nRF5340 empty network core sample as a child image (network core).
 
 config NCS_SAMPLE_PROVISIONING_NET_CORE_CHILD_IMAGE
