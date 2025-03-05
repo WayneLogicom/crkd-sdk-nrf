@@ -59,12 +59,20 @@ LOG_MODULE_REGISTER(esb, CONFIG_ESB_LOG_LEVEL);
 		#define TXDBG_PIN       0xFF
 		#define RXDBG_PIN       0xFF
 	#endif
+#if defined(CONFIG_XBONE_CRKD_DPL)
+	// TODO: FAST mode (ESB request next UL msg midframe - gets us 2ms msg rate on UL, same as DL)
+    extern struct esb_payload* Radio_GetNextUplinkFrame( uint8_t seq ); // external function to get next UL msg from controller
+#endif
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 /* Constants */
 
 // PER support
 int esb_frame_count = 0;
 int esb_error_count = 0;
-
+#if defined(CONFIG_XBONE_CRKD_DPL)
+bool esb_retry = false;
+#endif
 
 /* 2 Mb RX wait for acknowledgment time-out value.
  * Smallest reliable value: 160.
@@ -1107,6 +1115,9 @@ static void on_radio_disabled_tx_wait_for_ack(void)
 			NVIC_SetPendingIRQ(ESB_EVT_IRQ);
 		} else {
 			bool radio_started = true;
+#if defined(CONFIG_XBONE_CRKD_DPL)
+			esb_retry = true;		// flag retry occured
+#endif						
 
 			nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_READY);
 
@@ -1193,12 +1204,23 @@ static void on_radio_disabled_rx_dpl(bool retransmit_payload,
 
 	uint32_t pipe = nrf_radio_rxmatch_get(NRF_RADIO);
 
-	if (tx_fifo.count > 0 && ack_pl_wrap_pipe[pipe] != 0) {
+	if (tx_fifo.count > 0 && ack_pl_wrap_pipe[pipe] != 0) 
+	{
+		#if 0
+		//#if defined(CONFIG_XBONE_CRKD_DPL)
+
+		// $$$$$
+		uint8_t seq = rx_pdu->data[1]; // get last uplink seq# from the downlink packet just received
+		struct esb_payload* ul_payload = Radio_GetNextUplinkFrame( seq ); // fill out the ACK payload from the uplink queue
+		ul_payload = ul_payload;
+		#endif
+
 		current_payload = ack_pl_wrap_pipe[pipe]->p_payload;
 
 		/* Pipe stays in ACK with payload until TX FIFO is empty */
 		/* Do not report TX success on first ack payload or retransmit */
-		if (pipe_info->ack_payload == true && !retransmit_payload) {
+		if (pipe_info->ack_payload == true && !retransmit_payload) 
+		{
 			ack_pl_wrap_pipe[pipe]->in_use = false;
 			ack_pl_wrap_pipe[pipe] = ack_pl_wrap_pipe[pipe]->p_next;
 			tx_fifo.count--;
@@ -1213,21 +1235,35 @@ static void on_radio_disabled_rx_dpl(bool retransmit_payload,
 			interrupt_flags |= INT_TX_SUCCESS_MSK;
 		}
 
-		if (current_payload != 0) {
+		if (current_payload != 0) 
+		{
 			pipe_info->ack_payload = true;
 			update_rf_payload_format(current_payload->length);
 
 			tx_pdu->type.dpl_pdu.length = current_payload->length;
 			memcpy(tx_pdu->data, current_payload->data, current_payload->length);
-		} else {
+		} 
+		else 
+		{
 			pipe_info->ack_payload = false;
 			update_rf_payload_format(0);
 			tx_pdu->type.dpl_pdu.length = 0;
 		}
-	} else {
+	} 
+	else 
+	{
+		#if defined(CONFIG_XBONE_CRKD_DPL)
+		uint8_t seq = rx_pdu->data[1]; // get last uplink seq# from the downlink packet just received
+		struct esb_payload* ul_payload = Radio_GetNextUplinkFrame( seq ); // fill out the ACK payload from the uplink queue
+		pipe_info->ack_payload = true;
+		update_rf_payload_format(ul_payload->length);
+		tx_pdu->type.dpl_pdu.length = ul_payload->length;
+		memcpy(tx_pdu->data, ul_payload->data, ul_payload->length);
+		#else
 		pipe_info->ack_payload = false;
 		update_rf_payload_format(0);
 		tx_pdu->type.dpl_pdu.length = 0;
+		#endif
 	}
 
 	tx_pdu->type.dpl_pdu.pid = rx_pdu->type.dpl_pdu.pid;

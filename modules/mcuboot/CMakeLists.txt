@@ -387,6 +387,12 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
         \n"
       )
       set(mcuboot_key_file ${ZEPHYR_MCUBOOT_MODULE_DIR}/${CONFIG_BOOT_SIGNATURE_KEY_FILE})
+      message(STATUS "
+        ---------------------------------------------------------
+        --- Using: ${mcuboot_key_file}   
+        ---------------------------------------------------------
+        \n"
+      )
     endif()
 
     set(app_core_binary_name app_update.bin)

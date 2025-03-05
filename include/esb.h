@@ -510,6 +510,9 @@ int esb_reuse_pid(uint8_t pipe);
 
 extern int esb_frame_count;
 extern int esb_error_count;
+#if defined(CONFIG_XBONE_CRKD_DPL)
+extern bool esb_retry;
+#endif
 
 /** @} */
 
