@@ -1125,9 +1125,13 @@ static void on_radio_disabled_tx_wait_for_ack(void)
 			 * be entered again as soon as the system timer reaches
 			 * CC[1].
 			 */
-			nrf_radio_shorts_set(NRF_RADIO,
-				(radio_shorts_common | NRF_RADIO_SHORT_DISABLED_RXEN_MASK));
+			nrf_radio_shorts_set(NRF_RADIO,	(radio_shorts_common | NRF_RADIO_SHORT_DISABLED_RXEN_MASK));
+
 			update_rf_payload_format(current_payload->length);
+
+			#if defined(CONFIG_XBONE_CRKD_DPL)
+			tx_payload_buffer[4] |= 0x80; // flag this is a retry to the receiver in the DL_TYPE byte [1st two bytes are esb hdr info, our 1st byte starts @2]
+			#endif
 
 			nrf_radio_packetptr_set(NRF_RADIO, tx_payload_buffer);
 
@@ -1206,15 +1210,6 @@ static void on_radio_disabled_rx_dpl(bool retransmit_payload,
 
 	if (tx_fifo.count > 0 && ack_pl_wrap_pipe[pipe] != 0) 
 	{
-		#if 0
-		//#if defined(CONFIG_XBONE_CRKD_DPL)
-
-		// $$$$$
-		uint8_t seq = rx_pdu->data[1]; // get last uplink seq# from the downlink packet just received
-		struct esb_payload* ul_payload = Radio_GetNextUplinkFrame( seq ); // fill out the ACK payload from the uplink queue
-		ul_payload = ul_payload;
-		#endif
-
 		current_payload = ack_pl_wrap_pipe[pipe]->p_payload;
 
 		/* Pipe stays in ACK with payload until TX FIFO is empty */
